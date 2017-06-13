@@ -32,11 +32,14 @@ install:
   - set -vx  # echo commands
   - source multibuild/osx_utils.sh
   - get_macpython_environment $VERSION venv
-  - pip install wheel nose
+  - pip install wheel nose nose-cov codecov
   - python setup.py install
 
 script:
   - echo $PWD
   - mkdir tmp_test_dir
   - cd tmp_test_dir
-  - nosetests delocate
+  - nosetests --with-cov --cov delocate delocate
+
+after_success:
+  - codecov
