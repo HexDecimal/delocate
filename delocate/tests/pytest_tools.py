@@ -1,3 +1,4 @@
+from pprint import pformat
 from typing import Any
 
 import pytest
@@ -24,10 +25,14 @@ def assert_raises(expected_exception, *args, **kwargs):
 def assert_equal(first, second):
     # type: (Any, Any) -> None
     __tracebackhide__ = True
-    assert first == second
+    assert first == second, "\n{0}\n==\n{1}".format(
+        pformat(first), pformat(second)
+    )
 
 
 def assert_not_equal(first, second):
     # type: (Any, Any) -> None
     __tracebackhide__ = True
-    assert first != second
+    assert first != second, "\n{0}\n!=\n{1}".format(
+        pformat(first), pformat(second)
+    )

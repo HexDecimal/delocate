@@ -54,4 +54,4 @@ script:
   - echo $PWD
   - mkdir tmp_test_dir
   - cd tmp_test_dir
-  - pytest --pyargs delocate
+  - pytest --pyargs delocate --log-level DEBUG
