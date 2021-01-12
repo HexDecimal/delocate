@@ -7,6 +7,8 @@ import os
 from os.path import (join as pjoin, dirname, realpath, relpath, split)
 from typing import Dict, Iterable, Text
 
+import pytest
+
 from ..libsana import (tree_libs, get_prefix_stripper, get_rp_stripper,
                        stripped_lib_dict, wheel_libs, resolve_rpath,
                        DependencyNotFound)
@@ -33,6 +35,7 @@ def get_ext_dict(local_libs):
     return ext_deps
 
 
+@pytest.mark.filterwarnings("ignore:tree_libs:DeprecationWarning")
 def test_tree_libs():
     # type: () -> None
     # Test ability to walk through tree, finding dynamic libary refs

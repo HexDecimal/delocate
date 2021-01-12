@@ -7,6 +7,8 @@ import stat
 import shutil
 from typing import Iterator, Text
 
+import pytest
+
 from ..tools import (back_tick, unique_by_index, ensure_writable, chmod_perms,
                      ensure_permissions, parse_install_name, zip2dir, dir2zip,
                      find_package_dirs, cmp_contents, get_archs, lipo_fuse,
@@ -37,6 +39,7 @@ def test_call():
     assert_raises(RuntimeError, check_call, cmd)
 
 
+@pytest.mark.filterwarnings("ignore:back_tick:DeprecationWarning")
 def test_back_tick():
     # type: () -> None
     cmd = 'python -c "print(\'Hello\')"'
