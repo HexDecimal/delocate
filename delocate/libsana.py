@@ -19,6 +19,7 @@ from typing import (
     Text,
     Tuple,
 )
+import warnings
 
 import six
 
@@ -207,8 +208,6 @@ class DependencyTree(object):
 def tree_libs(
     start_path,  # type: Text
     filt_func=None,  # type: Optional[Callable[[Text], bool]]
-    skip_missing=True,  # type: bool
-    recursive=False,  # type: bool
 ):
     # type: (...) -> Dict[Text, Dict[Text, Text]]
     """ Return analysis of library dependencies within `start_path`
@@ -221,13 +220,6 @@ def tree_libs(
         If None, inspect all files for library dependencies. If callable,
         accepts filename as argument, returns True if we should inspect the
         file, False otherwise.
-    skip_missing : bool, default=True
-        Determines if dependency resolution failures are considered a critical
-        error to be raised.  Otherwise missing libraries are only warned about.
-    recursive : bool, default=False
-        If True then all dependences and sub-dependences will be returned.
-        If False then only the direct dependences of libraries in `start_path`
-        will be returned.
     Returns
     -------
     lib_dict : dict
@@ -255,7 +247,19 @@ def tree_libs(
 
     * https://developer.apple.com/library/mac/documentation/Darwin/Reference/ManPages/man1/dyld.1.html  # noqa: E501
     * http://matthew-brett.github.io/pydagogue/mac_runtime_link.html
+
+    .. deprecated:: 0.8
+        This function does not support `@loader_path` and only returns the
+        direct dependencies of the libraries in `start_path`.
+
+        :class:`DependencyTree` should be used instead.
     """
+    warnings.warn(
+        "tree_libs doesn't support @loader_path and has been deprecated"
+        " in favor of DependencyTree.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     lib_dict = {}  # type: Dict[Text, Dict[Text, Text]]
     for dirpath, dirnames, basenames in os.walk(start_path):
         for base in basenames:
@@ -265,24 +269,18 @@ def tree_libs(
             dep_tree = DependencyTree(
                 path=depending_libpath,
                 filt_func=filt_func,
-                skip_missing=skip_missing,
+                skip_missing=True,
             )
-            if recursive:
-                dependencies = dep_tree.walk()  # type: Iterable[DependencyTree]
-            else:
-                dependencies = [dep_tree]
-            for dependant in dependencies:
-                for depending, install_name in dependant.dependencies.items():
-                    lib_dict.setdefault(depending.path, {})
-                    lib_dict[depending.path][dependant.path] = install_name
-
-    for dependency, dependings in list(lib_dict.items()):
-        for install_name in dependings.values():
-            if not install_name.startswith("@loader_path/"):
-                continue
-            logger.debug("Excluding %s because it had @loader_path", dependency)
-            del lib_dict[dependency]
-            break
+            for depending, install_name in dep_tree.dependencies.items():
+                if install_name.startswith("@loader_path/"):
+                    # Support for `@loader_path` would break existing callers.
+                    logger.debug(
+                        "Excluding %s because it has '@loader_path'.",
+                        install_name
+                    )
+                    continue
+                lib_dict.setdefault(depending.path, {})
+                lib_dict[depending.path][dep_tree.path] = install_name
     return lib_dict
 
 
