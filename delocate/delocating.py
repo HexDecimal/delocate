@@ -13,7 +13,8 @@ from typing import (Callable, Dict, FrozenSet, Iterable, List, Optional,
                     Set, Text, Tuple, Union)
 
 from .pycompat import string_types
-from .libsana import tree_libs, stripped_lib_dict, get_rp_stripper
+from .libsana import (tree_libs, stripped_lib_dict, get_rp_stripper,
+                      dependency_walk)
 from .tools import (set_install_name, zip2dir, dir2zip, validate_signature,
                     find_package_dirs, set_install_id, get_archs)
 from .tmpdirs import TemporaryDirectory
@@ -300,6 +301,11 @@ def delocate_path(
         is a file in the path depending on ``copied_lib_path``, and the value
         is the ``install_name`` of ``copied_lib_path`` in the depending
         library.
+
+    Raises
+    ------
+    DependencyNotFound
+        When any dependencies can not be located.
     """
     if lib_filt_func == "dylibs-only":
         lib_filt_func = _dylibs_only
@@ -307,12 +313,16 @@ def delocate_path(
         raise TypeError('lib_filt_func string can only be "dylibs-only"')
     if not exists(lib_path):
         os.makedirs(lib_path)
-    lib_dict = tree_libs(tree_path, lib_filt_func)
-    if copy_filt_func is not None:
-        lib_dict = dict((key, value) for key, value in lib_dict.items()
-                        if copy_filt_func(key))
-    copied = delocate_tree_libs(lib_dict, lib_path, tree_path)
-    return copy_recurse(lib_path, copy_filt_func, copied)
+
+    lib_dict = {}  # type: Dict[Text, Dict[Text, Text]]
+    for library in dependency_walk(tree_path, lib_filt_func):
+        for depending, install_name in library.dependencies.items():
+            if copy_filt_func and not copy_filt_func(depending.path):
+                continue
+            lib_dict.setdefault(depending.path, {})
+            lib_dict[depending.path][library.path] = install_name
+
+    return delocate_tree_libs(lib_dict, lib_path, tree_path)
 
 
 def _merge_lib_dict(d1, d2):

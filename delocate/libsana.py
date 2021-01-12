@@ -205,6 +205,48 @@ class DependencyTree(object):
         )
 
 
+def dependency_walk(
+    root_path,  # type: Text
+    filt_func=None,  # type: Optional[Callable[[Text], bool]]
+):
+    # type: (...) -> Iterator[DependencyTree]
+    """Walk along dependences starting with the libraries within `root_path`.
+
+    Parameters
+    ----------
+    root_path : str
+        root path of tree to search for libraries depending on other libraries.
+    filt_func : None or callable, optional
+        If None, inspect all files for library dependencies. If callable,
+        accepts filename as argument, returns True if we should inspect the
+        file, False otherwise.
+
+    Yields
+    ------
+    DependencyTree
+        Iterates over the libraries in `root_path` and each of their
+        dependencies without any duplicates.
+
+    Raises
+    ------
+    DependencyNotFound
+        When any dependencies can not be located.
+    """
+    # This cache is what prevents yielding duplicates.
+    cache = {}  # type: Dict[Text, DependencyTree]
+    for dirpath, dirnames, basenames in os.walk(root_path):
+        for base in basenames:
+            depending_libpath = realpath(pjoin(dirpath, base))
+            if depending_libpath in cache:
+                continue  # A library in root_path was a dependency of another.
+            if filt_func and not filt_func(depending_libpath):
+                continue
+            for library in DependencyTree(
+                path=depending_libpath, filt_func=filt_func, cache=cache
+            ).walk():
+                yield library
+
+
 def tree_libs(
     start_path,  # type: Text
     filt_func=None,  # type: Optional[Callable[[Text], bool]]
