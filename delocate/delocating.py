@@ -148,7 +148,16 @@ def copy_recurse(
     copied_libs : dict
         Input `copied_libs` dict with any extra libraries and / or dependencies
         added.
+
+    .. deprecated:: 0.8
+        This function is obsolete.  :func:`delocate_path` handles recursive
+        dependencies while also supporting `@loader_path`.
     """
+    warnings.warn(
+        "copy_recurse is obsolete and should no longer be called.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if copied_libs is None:
         copied_libs = {}
     else:

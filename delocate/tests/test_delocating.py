@@ -8,6 +8,7 @@ from os.path import (join as pjoin, dirname, basename, relpath, realpath,
 import shutil
 from typing import Any, Iterable, List, Set, Text, Tuple
 
+import pytest
 import six
 
 from ..delocating import (DelocationError, delocate_tree_libs, copy_recurse,
@@ -183,6 +184,8 @@ def _copy_to(fname, directory, new_base):
     return new_name
 
 
+@pytest.mark.filterwarnings("ignore:tree_libs:DeprecationWarning")
+@pytest.mark.filterwarnings("ignore:copy_recurse:DeprecationWarning")
 def test_copy_recurse():
     # type: () -> None
     # Function to find / copy needed libraries recursively
@@ -284,6 +287,8 @@ def test_copy_recurse():
         assert_equal(copied_libs, copied_copied)
 
 
+@pytest.mark.filterwarnings("ignore:tree_libs:DeprecationWarning")
+@pytest.mark.filterwarnings("ignore:copy_recurse:DeprecationWarning")
 def test_copy_recurse_overwrite():
     # type: () -> None
     # Check that copy_recurse won't overwrite pre-existing libs
