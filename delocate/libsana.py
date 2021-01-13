@@ -268,19 +268,15 @@ def tree_libs(
         dictionary with (key, value) pairs of (``libpath``,
         ``dependings_dict``).
 
-        ``libpath`` is a canonical (``os.path.realpath``) filename of library.
+        ``libpath`` is a canonical (``os.path.realpath``) filename of library,
+        or library name starting with {'@loader_path'}.
+
 
         ``dependings_dict`` is a dict with (key, value) pairs of
         (``depending_libpath``, ``install_name``), where ``dependings_libpath``
         is the canonical (``os.path.realpath``) filename of the library
         depending on ``libpath``, and ``install_name`` is the "install_name" by
         which ``depending_libpath`` refers to ``libpath``.
-
-    Raises
-    ------
-    DependencyNotFound
-        When any `@rpath` dependencies can not be located and `skip_missing`
-        is False.
 
     Notes
     -----
