@@ -11,7 +11,7 @@ import pytest
 
 from ..libsana import (tree_libs, get_prefix_stripper, get_rp_stripper,
                        stripped_lib_dict, wheel_libs, resolve_rpath,
-                       DependencyNotFound)
+                       DependencyTree, DependencyNotFound)
 
 from ..tools import set_install_name
 
@@ -203,3 +203,12 @@ def test_resolve_rpath():
     assert_raises(
         DependencyNotFound, lambda: resolve_rpath(lib_rpath, [], path)
     )
+
+
+def test_DependencyTree():
+    # type: () -> None
+    with pytest.raises(DependencyNotFound):
+        DependencyTree("nonexisting.lib")
+    liba = DependencyTree(LIBA)
+    assert LIBA in repr(liba)
+    assert liba == eval(repr(liba))

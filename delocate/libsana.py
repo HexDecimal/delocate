@@ -8,6 +8,7 @@ from os.path import basename, dirname, join as pjoin, realpath
 
 import logging
 from typing import (
+    Any,
     Callable,
     Dict,
     Iterable,
@@ -197,12 +198,22 @@ class DependencyTree(object):
             for sub_dependency in dependency.walk(visited=visited):
                 yield sub_dependency
 
+    def __eq__(self, other):
+        # type: (Any) -> bool
+        if not isinstance(other, DependencyTree):
+            return False
+        return self.path == other.path
+
+    def __hash__(self):
+        # type: () -> int
+        return hash(self.path)
+
     def __repr__(self):
         # type: () -> str
-        dependencies = getattr(self, "dependencies", None)
-        return "DependencyTree(path={0!r}, dependencies={1!r})".format(
-            self.path, dependencies
-        )
+        parameters = ["path={0!r}".format(self.path), "dependencies=None"]
+        if not os.path.isfile(self.path):
+            parameters.append("skip_missing=True")
+        return "DependencyTree({0})".format(", ".join(parameters))
 
 
 def dependency_walk(
