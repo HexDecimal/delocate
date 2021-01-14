@@ -207,8 +207,27 @@ def test_resolve_rpath():
 
 def test_DependencyTree():
     # type: () -> None
-    with pytest.raises(DependencyNotFound):
-        DependencyTree("nonexisting.lib")
     liba = DependencyTree(LIBA)
+    # Confirm representation string.
     assert LIBA in repr(liba)
     assert liba == eval(repr(liba))
+    assert "stub_missing" not in repr(liba)
+
+    # This check might be too platform specific.
+    assert liba.get_dependencies() == {
+        DependencyTree(
+            "/usr/lib/libstdc++.6.dylib"
+        ): "/usr/lib/libstdc++.6.dylib",
+        DependencyTree(
+            "/usr/lib/libSystem.B.dylib"
+        ): "/usr/lib/libSystem.B.dylib",
+    }
+
+
+def test_DependencyTree_missing_files():
+    # type: () -> None
+    with pytest.raises(DependencyNotFound):
+        DependencyTree("nonexistent.lib")
+    bad_lib = DependencyTree("nonexistent.lib", stub_missing=True)
+    assert bad_lib.path == "nonexistent.lib"  # Bad paths kept as-is.
+    assert "stub_missing=True" in repr(bad_lib)  # Stubbed libs are marked.

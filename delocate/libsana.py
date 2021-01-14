@@ -14,7 +14,6 @@ from typing import (
     Iterable,
     Iterator,
     List,
-    Mapping,
     Optional,
     Set,
     Text,
@@ -41,81 +40,61 @@ class DependencyNotFound(Exception):
 class DependencyTree(object):
     """Info on a library and all of its dependences.
 
-    Provide the path to the first library and all other information will be
-    filled automatically.
-
     Parameters
     ----------
     path : str
         The path of a library.
-    dependencies : mapping of (DependencyTree: str) or None, optional
-        The dependencies of a library if known.  If None is given then they
-        will be detected automatically.  See attributes section.
-    filt_func : None or callable, optional
-        If None, inspect all files for library dependencies. If callable,
-        accepts filename as argument, returns True if we should inspect the
-        file, False otherwise.
-    skip_missing : bool, default=False
+    stub_missing : bool, default=False
         Determines if dependency resolution failures are considered a critical
         error to be raised.
         Otherwise missing libraries are shown in error logs.
-    cache : dict of str: DependencyTree
-        A cache of DependencyTree objects used to detect cyclic dependences.
-        The keys are the canonical (``os.path.realpath``) file path of the
-        DependencyTree value.
 
     Attributes
     ----------
     path : str
         The canonical (``os.path.realpath``) file path of this library.
-    dependencies : dict of (DependencyTree: str)
-        The dependencies of this library, which themselves may have their own
-        dependencies.
-        The key is the DependencyTree, the value is the install_name which
-        resolved to that library.
-        Libraries may depend on each other in a cycle.
+    is_stub : bool
+        True when `path` refers to a bad install name instead of a canonical
+        file path.
 
     Raises
     ------
     DependencyNotFound
-        When any dependencies can not be located and `skip_missing` is False.
+        When any dependencies can not be located and `stub_missing` is False.
     """
 
     def __init__(
         self,
         path,  # type: Text
-        dependencies=None,  # type: Optional[Mapping[DependencyTree, Text]]
-        filt_func=None,  # type: Optional[Callable[[Text], bool]]
-        skip_missing=False,  # type: bool
-        cache=None,  # type: Optional[Dict[Text, DependencyTree]]
+        stub_missing=False,  # type: bool
     ):
         # type: (...) -> None
-        self.path = realpath(path)
-        if cache is None:
-            cache = {}
-        cache[self.path] = self
-        if not os.path.isfile(self.path):
-            if skip_missing:
-                # Disable dependencies auto-detection for this library.
-                dependencies = dependencies or {}
-                logger.error("Missing dependency stubbed: %s", self.path)
-            else:
-                raise DependencyNotFound(self.path)
-        if dependencies is None:  # Auto-detect dependencies recursively.
-            self.dependencies = dict(
-                self.__find_dependencies(filt_func, skip_missing, cache)
-            )
-        else:
-            self.dependencies = dict(dependencies)
+        if not os.path.isfile(path):
+            if not stub_missing:
+                raise DependencyNotFound(path)
+            logger.error("Missing dependency stubbed: %s", path)
+            self.__path = path
+            return
+        self.__path = realpath(path)
+
+    @property
+    def path(self):
+        # type: () -> Text
+        return self.__path
+
+    @property
+    def is_stub(self):
+        # type: () -> bool
+        return not os.path.isfile(self.path)
 
     def __find_dependencies(
         self,
-        filt_func,  # type: Optional[Callable[[Text], bool]]
-        skip_missing,  # type: bool
-        cache,  # type: Dict[Text, DependencyTree]
+        stub_missing,  # type: bool
     ):
         # type: (...) -> Iterator[Tuple[DependencyTree, Text]]
         """Detect and return this libraries dependences.
+
+        See :meth:`get_dependencies` for parameters.
 
         Yields
         ------
@@ -126,11 +105,9 @@ class DependencyTree(object):
         Raises
         ------
         DependencyNotFound
-            When any dependencies can not be located and `skip_missing` is
+            When any dependencies can not be located and `stub_missing` is
             False.
         """
-        if filt_func is not None and not filt_func(self.path):
-            return
         rpaths = get_rpaths(self.path) + get_environment_variable_paths()
         for install_name in get_install_names(self.path):
             try:
@@ -142,8 +119,11 @@ class DependencyTree(object):
                     )
                 else:
                     dependency_path = search_environment_for_lib(install_name)
-                if not os.path.exists(dependency_path):
-                    raise DependencyNotFound(dependency_path)
+                yield DependencyTree(dependency_path), install_name
+                if dependency_path != install_name:
+                    logger.debug(
+                        "%s resolved to: %s", install_name, dependency_path
+                    )
             except DependencyNotFound:
                 error_msg = (
                     "\n{0} not found:"
@@ -152,32 +132,64 @@ class DependencyTree(object):
                         install_name, self.path, "\n    ".join(rpaths)
                     )
                 )
-                if skip_missing:
-                    logger.error(error_msg)
-                else:
+                if not stub_missing:
                     raise DependencyNotFound(error_msg)
+                logger.error(error_msg)
+                # At this point install_name is known to be a bad path.
+                # Expanding install_name with realpath may be undesirable.
+                yield DependencyTree(
+                    realpath(install_name), stub_missing=True
+                ), install_name
 
-            if dependency_path in cache:  # Handle cyclic dependencies.
-                yield cache[dependency_path], install_name
-                continue
-            if dependency_path != install_name:
-                logger.debug(
-                    "\n%s resolved to:\n%s", install_name, dependency_path
-                )
-            yield DependencyTree(
-                path=dependency_path,
-                dependencies=None,  # Recurse into dependencies.
-                filt_func=filt_func,
-                skip_missing=skip_missing,
-                cache=cache,
-            ), install_name
+    def get_dependencies(
+        self,
+        filt_func=None,  # type: Optional[Callable[[Text], bool]]
+        stub_missing=False,  # type: bool
+    ):
+        # type: (...) -> Dict[DependencyTree, Text]
+        """
+        dependencies : mapping of (DependencyTree: str) or None, optional
+            The dependencies of a library if known.  If None is given then they
+            will be detected automatically.  See attributes section.
 
-    def walk(self, visited=None):
-        # type: (Optional[Set[DependencyTree]]) -> Iterator[DependencyTree]
+        Parameters
+        ----------
+        filt_func : None or callable, optional
+            If None, inspect all files for library dependencies. If callable,
+            accepts filename as argument, returns True if we should inspect the
+            file, False otherwise.
+        stub_missing : bool, default=False
+            Determines if dependency resolution failures are considered a
+            critical error to be raised.
+            Otherwise missing libraries are shown in error logs.
+
+        Raises
+        ------
+        DependencyNotFound
+            When any dependencies can not be located and `stub_missing` is
+            False.
+        """
+        return dict(self.__find_dependencies(stub_missing=stub_missing))
+
+    def walk(
+        self,
+        filt_func=None,  # type: Optional[Callable[[Text], bool]]
+        stub_missing=False,  # type: bool
+        visited=None,  # type: Optional[Set[DependencyTree]]
+    ):
+        # type: (...) -> Iterator[DependencyTree]
         """Iterate over all of this trees dependencies inclusively.
 
         Parameters
         ----------
+        filt_func : None or callable, optional
+            If None, inspect all files for library dependencies. If callable,
+            accepts filename as argument, returns True if we should inspect the
+            file, False otherwise.
+        stub_missing : bool, default=False
+            Determines if dependency resolution failures are considered a
+            critical error to be raised.
+            Otherwise missing libraries are shown in error logs.
         visited : set of DependencyTree
             This set is updated with new DependencyTree's as they're visited.
             This is used to prevent infinite recursion.
@@ -193,9 +205,16 @@ class DependencyTree(object):
             return
         else:
             visited.add(self)
+        if filt_func and not filt_func(self.path):
+            logger.debug("Ignoring dependencies of: %s", self.path)
+            return
         yield self
-        for dependency in self.dependencies:
-            for sub_dependency in dependency.walk(visited=visited):
+        for dependency in self.get_dependencies(
+            filt_func=filt_func, stub_missing=stub_missing
+        ):
+            for sub_dependency in dependency.walk(
+                filt_func=filt_func, stub_missing=stub_missing, visited=visited
+            ):
                 yield sub_dependency
 
     def __eq__(self, other):
@@ -210,9 +229,9 @@ class DependencyTree(object):
 
     def __repr__(self):
         # type: () -> str
-        parameters = ["path={0!r}".format(self.path), "dependencies=None"]
-        if not os.path.isfile(self.path):
-            parameters.append("skip_missing=True")
+        parameters = ["path={0!r}".format(self.path)]
+        if self.is_stub:
+            parameters.append("stub_missing=True")
         return "DependencyTree({0})".format(", ".join(parameters))
 
 
@@ -244,17 +263,15 @@ def dependency_walk(
         When any dependencies can not be located.
     """
     # This cache is what prevents yielding duplicates.
-    cache = {}  # type: Dict[Text, DependencyTree]
+    visited = set()  # type: Set[DependencyTree]
     for dirpath, dirnames, basenames in os.walk(root_path):
         for base in basenames:
-            depending_libpath = realpath(pjoin(dirpath, base))
-            if depending_libpath in cache:
+            depending = DependencyTree(path=pjoin(dirpath, base))
+            if depending in visited:
                 continue  # A library in root_path was a dependency of another.
-            if filt_func and not filt_func(depending_libpath):
+            if filt_func and not filt_func(depending.path):
                 continue
-            for library in DependencyTree(
-                path=depending_libpath, filt_func=filt_func, cache=cache
-            ).walk():
+            for library in depending.walk(filt_func=filt_func, visited=visited):
                 yield library
 
 
@@ -313,14 +330,14 @@ def tree_libs(
     for dirpath, dirnames, basenames in os.walk(start_path):
         for base in basenames:
             depending_libpath = realpath(pjoin(dirpath, base))
-            if filt_func is not None and not filt_func(depending_libpath):
+            if filt_func and not filt_func(depending_libpath):
+                logger.debug("Ignoring dependencies of: %s", depending_libpath)
                 continue
-            dep_tree = DependencyTree(
-                path=depending_libpath,
-                filt_func=filt_func,
-                skip_missing=True,
+            library = DependencyTree(path=depending_libpath)
+            dependencies = library.get_dependencies(
+                filt_func=filt_func, stub_missing=True
             )
-            for depending, install_name in dep_tree.dependencies.items():
+            for depending, install_name in dependencies.items():
                 if install_name.startswith("@loader_path/"):
                     # Support for `@loader_path` would break existing callers.
                     logger.debug(
@@ -329,7 +346,7 @@ def tree_libs(
                     )
                     continue
                 lib_dict.setdefault(depending.path, {})
-                lib_dict[depending.path][dep_tree.path] = install_name
+                lib_dict[depending.path][library.path] = install_name
     return lib_dict
 
 

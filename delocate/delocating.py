@@ -325,7 +325,8 @@ def delocate_path(
 
     lib_dict = {}  # type: Dict[Text, Dict[Text, Text]]
     for library in dependency_walk(tree_path, lib_filt_func):
-        for depending, install_name in library.dependencies.items():
+        dependencies = library.get_dependencies(filt_func=lib_filt_func)
+        for depending, install_name in dependencies.items():
             if copy_filt_func and not copy_filt_func(depending.path):
                 continue
             lib_dict.setdefault(depending.path, {})
