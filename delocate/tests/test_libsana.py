@@ -11,7 +11,7 @@ import pytest
 
 from ..libsana import (tree_libs, get_prefix_stripper, get_rp_stripper,
                        stripped_lib_dict, wheel_libs, resolve_rpath,
-                       DependencyTree, DependencyNotFound)
+                       get_dependencies, DependencyNotFound)
 
 from ..tools import set_install_name
 
@@ -205,29 +205,12 @@ def test_resolve_rpath():
     )
 
 
-def test_DependencyTree():
-    # type: () -> None
-    liba = DependencyTree(LIBA)
-    # Confirm representation string.
-    assert LIBA in repr(liba)
-    assert liba == eval(repr(liba))
-    assert "stub_missing" not in repr(liba)
-
-    # This check might be too platform specific.
-    assert liba.get_dependencies() == {
-        DependencyTree(
-            "/usr/lib/libstdc++.6.dylib"
-        ): "/usr/lib/libstdc++.6.dylib",
-        DependencyTree(
-            "/usr/lib/libSystem.B.dylib"
-        ): "/usr/lib/libSystem.B.dylib",
-    }
-
-
-def test_DependencyTree_missing_files():
+def test_get_dependencies():
     # type: () -> None
     with pytest.raises(DependencyNotFound):
-        DependencyTree("nonexistent.lib")
-    bad_lib = DependencyTree("nonexistent.lib", stub_missing=True)
-    assert bad_lib.path == "nonexistent.lib"  # Bad paths kept as-is.
-    assert "stub_missing=True" in repr(bad_lib)  # Stubbed libs are marked.
+        list(get_dependencies("nonexistent.lib"))
+    # This check might be too platform specific.
+    assert dict(get_dependencies(LIBA)) == {
+        realpath("/usr/lib/libstdc++.6.dylib"): "/usr/lib/libstdc++.6.dylib",
+        realpath("/usr/lib/libSystem.B.dylib"): "/usr/lib/libSystem.B.dylib",
+    }

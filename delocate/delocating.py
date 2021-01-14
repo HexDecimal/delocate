@@ -14,7 +14,7 @@ from typing import (Callable, Dict, FrozenSet, Iterable, List, Optional,
 
 from .pycompat import string_types
 from .libsana import (tree_libs, stripped_lib_dict, get_rp_stripper,
-                      dependency_walk)
+                      walk_directory, get_dependencies)
 from .tools import (set_install_name, zip2dir, dir2zip, validate_signature,
                     find_package_dirs, set_install_id, get_archs)
 from .tmpdirs import TemporaryDirectory
@@ -324,13 +324,12 @@ def delocate_path(
         os.makedirs(lib_path)
 
     lib_dict = {}  # type: Dict[Text, Dict[Text, Text]]
-    for library in dependency_walk(tree_path, lib_filt_func):
-        dependencies = library.get_dependencies(filt_func=lib_filt_func)
-        for depending, install_name in dependencies.items():
-            if copy_filt_func and not copy_filt_func(depending.path):
+    for library_path in walk_directory(tree_path, lib_filt_func):
+        for depending_path, install_name in get_dependencies(library_path):
+            if copy_filt_func and not copy_filt_func(depending_path):
                 continue
-            lib_dict.setdefault(depending.path, {})
-            lib_dict[depending.path][library.path] = install_name
+            lib_dict.setdefault(depending_path, {})
+            lib_dict[depending_path][library_path] = install_name
 
     return delocate_tree_libs(lib_dict, lib_path, tree_path)
 
