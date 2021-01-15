@@ -154,6 +154,11 @@ def walk_library(
     for dependency_path, _ in get_dependencies(
         lib_path, allow_missing=allow_missing
     ):
+        if not os.path.isfile(dependency_path):
+            logger.error(
+                "%s required by %s not found.", dependency_path, lib_path
+            )
+            continue
         for sub_dependency in walk_library(
             dependency_path,
             filt_func=filt_func,
