@@ -6,6 +6,7 @@ from __future__ import division, print_function
 import os
 from os.path import (join as pjoin, dirname, basename, exists, abspath,
                      relpath, realpath)
+import logging
 import shutil
 import warnings
 from subprocess import Popen, PIPE
@@ -19,6 +20,9 @@ from .tools import (set_install_name, zip2dir, dir2zip, validate_signature,
                     find_package_dirs, set_install_id, get_archs)
 from .tmpdirs import TemporaryDirectory
 from .wheeltools import rewrite_record, InWheel
+
+
+logger = logging.getLogger(__name__)
 
 # Prefix for install_name_id of copied libraries
 DLC_PREFIX = '/DLC/'
@@ -325,6 +329,9 @@ def delocate_path(
 
     lib_dict = {}  # type: Dict[Text, Dict[Text, Text]]
     for library_path in walk_directory(tree_path, lib_filt_func):
+        if not os.path.isfile(library_path):
+            logger.error("Can't find library: %s", library_path)
+            continue
         for depending_path, install_name in get_dependencies(library_path):
             if copy_filt_func and not copy_filt_func(depending_path):
                 continue
