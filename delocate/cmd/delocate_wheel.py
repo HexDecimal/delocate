@@ -9,6 +9,7 @@ from __future__ import division, print_function, absolute_import
 import os
 from os.path import join as pjoin, basename, exists, expanduser
 import sys
+import logging
 from typing import List, Optional, Text
 
 from optparse import OptionParser, Option
@@ -47,6 +48,8 @@ def main():
     if len(wheels) < 1:
         parser.print_help()
         sys.exit(1)
+    if opts.verbose:
+        logging.basicConfig(level="DEBUG")
     multi = len(wheels) > 1
     if opts.wheel_dir:
         wheel_dir = expanduser(opts.wheel_dir)
