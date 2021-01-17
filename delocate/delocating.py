@@ -75,7 +75,6 @@ def delocate_tree_libs(
     delocated_libs = set()
     copied_basenames = set()
     rp_root_path = realpath(root_path)
-    rp_lib_path = realpath(lib_path)
     # Test for errors first to avoid getting half-way through changing the tree
     for required, requirings in lib_dict.items():
         if required.startswith('@'):  # assume @rpath etc are correct
@@ -92,25 +91,41 @@ def delocate_tree_libs(
             if not exists(required):
                 raise DelocationError('library "{0}" does not exist'.format(
                     required))
-            copied_libs[required] = requirings
+            logger.debug("%s will be copied.", required)
+            # Copy requirings to preserve it since it will be modified later.
+            copied_libs[required] = requirings.copy()
             copied_basenames.add(r_ed_base)
         else:  # Is local, plan to set relative loader_path
             delocated_libs.add(required)
+            logger.debug("%s will be modified in-place.", required)
     # Modify in place now that we've checked for errors
-    for required in copied_libs:
-        shutil.copy(required, lib_path)
-        # Set rpath and install names for this copied library
-        for requiring, orig_install_name in lib_dict[required].items():
-            req_rel = relpath(rp_lib_path, dirname(requiring))
-            set_install_name(requiring, orig_install_name,
-                             '@loader_path/{0}/{1}'.format(
-                                 req_rel, basename(required)))
+    for old_path in copied_libs:
+        new_path = realpath(pjoin(lib_path, basename(old_path)))
+        logger.debug("Copying library %s", old_path)
+        shutil.copy(old_path, new_path)
+        # Delocate this file now that it is stored locally.
+        delocated_libs.add(new_path)
+        # Update lib_dict with the new file paths.
+        lib_dict[new_path] = lib_dict[old_path]
+        del lib_dict[old_path]
+        for required in list(lib_dict):
+            if old_path not in lib_dict[required]:
+                continue
+            lib_dict[required][new_path] = lib_dict[required][old_path]
+            del lib_dict[required][old_path]
+    logger.debug("2nd step:%r", lib_dict)
     for required in delocated_libs:
         # Set relative path for local library
         for requiring, orig_install_name in lib_dict[required].items():
             req_rel = relpath(required, dirname(requiring))
-            set_install_name(requiring, orig_install_name,
-                             '@loader_path/' + req_rel)
+            new_install_name = '@loader_path/' + req_rel
+            logger.debug(
+                "Modifying install name in %s from %s to %s",
+                requiring,
+                orig_install_name,
+                new_install_name,
+            )
+            set_install_name(requiring, orig_install_name, new_install_name)
     return copied_libs
 
 
