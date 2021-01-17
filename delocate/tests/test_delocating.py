@@ -161,7 +161,7 @@ def test_delocate_tree_libs():
             new_links = ['@loader_path/{0}/{1}'.format(pathto_copies,
                                                        basename(elib))
                          for elib in copied]
-            assert_true(set(new_links) <= set(lib_inames))
+            assert set(new_links) <= set(lib_inames), lib
 
 
 def _copy_fixpath(files, directory):
