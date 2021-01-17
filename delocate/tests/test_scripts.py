@@ -287,7 +287,7 @@ def test_fix_wheel_archs():
                 check_code=False)
             assert_false(code == 0)
             stderr_unicode = stderr.decode('latin1').strip()
-            assert_true(stderr_unicode.startswith('Traceback'))
+            assert "Traceback" in stderr_unicode
             assert_true(stderr_unicode.endswith(
                 "Some missing architectures in wheel"))
             stdout_unicode = stdout.decode('latin1').strip()

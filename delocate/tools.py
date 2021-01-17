@@ -6,6 +6,7 @@ import os
 from os.path import join as pjoin, relpath, isdir, exists
 import zipfile
 import re
+import logging
 import stat
 import time
 from typing import (
@@ -27,6 +28,8 @@ import warnings
 
 T = TypeVar("T")
 F = TypeVar('F', bound=Callable[..., Any])
+
+logger = logging.getLogger(__name__)
 
 
 class InstallNameError(Exception):
@@ -54,6 +57,7 @@ def run_call(cmd):
         The stripped output from the calls stderr pipe.
     """
     cmd_is_seq = not isinstance(cmd, str)
+    logger.debug("cmd:%s", " ".join(cmd) if cmd_is_seq else cmd)
     proc = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=not cmd_is_seq,
                  universal_newlines=True)
     out = ""
