@@ -73,8 +73,8 @@ def test_delocate_tree_libs():
                          '/usr/lib/libstdc++.6.dylib',
                          '/unlikely/libname.dylib')
         lib_dict = tree_libs(subtree)
-        assert_raises(DelocationError,
-                      delocate_tree_libs, lib_dict, copy_dir, subtree)
+        with pytest.raises(DelocationError):
+            delocate_tree_libs(lib_dict, copy_dir, subtree)
         # fix it
         set_install_name(liba,
                          '/unlikely/libname.dylib',
@@ -83,19 +83,22 @@ def test_delocate_tree_libs():
         copied = delocate_tree_libs(lib_dict, copy_dir, subtree)
         # Only the out-of-tree libraries get copied
         exp_dict = get_ext_dict(all_local_libs)
-        assert_equal(copied, exp_dict)
-        assert_equal(set(os.listdir(copy_dir)),
-                     set([basename(realpath(lib)) for lib in EXT_LIBS]))
+        assert copied == exp_dict
+        assert(
+            set(os.listdir(copy_dir))
+            == {basename(realpath(lib)) for lib in EXT_LIBS}
+        )
         # Libraries using the copied libraries now have an
         # install name starting with @loader_path, then
         # pointing to the copied library directory
         for lib in all_local_libs:
             pathto_copies = relpath(realpath(copy_dir), dirname(realpath(lib)))
-            lib_inames = get_install_names(lib)
-            new_links = ['@loader_path/{0}/{1}'.format(pathto_copies,
-                                                       basename(elib))
-                         for elib in copied]
-            assert_true(set(new_links) <= set(lib_inames))
+            lib_inames = set(get_install_names(lib))
+            new_links = {
+                '@loader_path/{0}/{1}'.format(pathto_copies, basename(elib))
+                for elib in copied
+            }
+            assert new_links <= lib_inames
         # Libraries now have a relative loader_path to their corresponding
         # in-tree libraries
         for requiring, using, rel_path in (
@@ -107,7 +110,7 @@ def test_delocate_tree_libs():
                 (slibc, 'libb.dylib', '../'),
                 (stest_lib, 'libc.dylib', '')):
             loader_path = '@loader_path/' + rel_path + using
-            assert_true(loader_path in get_install_names(requiring))
+            assert loader_path in get_install_names(requiring)
         # Check test libs still work
         check_call([test_lib])
         check_call([stest_lib])
@@ -120,8 +123,8 @@ def test_delocate_tree_libs():
         # out-of-tree will raise an error because of duplicate library names
         # (libc and slibc both named <something>/libc.dylib)
         lib_dict2 = tree_libs(subtree2)
-        assert_raises(DelocationError,
-                      delocate_tree_libs, lib_dict2, copy_dir2, '/fictional')
+        with pytest.raises(DelocationError):
+            delocate_tree_libs(lib_dict2, copy_dir2, '/fictional')
         # Rename a library to make this work
         new_slibc = pjoin(dirname(slibc), 'libc2.dylib')
         os.rename(slibc, new_slibc)
@@ -146,22 +149,39 @@ def test_delocate_tree_libs():
             rp_liba: {rp_slibc: liba,
                       rp_libc: liba,
                       rp_libb: liba}})
-        assert_equal(copied2, exp_dict)
+        assert copied2 == exp_dict
         ext_local_libs = (set(realpath(L) for L in EXT_LIBS) |
                           {liba, libb, libc, slibc})
-        assert_equal(set(os.listdir(copy_dir2)),
-                     set([basename(lib) for lib in ext_local_libs]))
-        # Libraries using the copied libraries now have an install name starting # noqa: E501
+        assert (
+            set(os.listdir(copy_dir2))
+            == {basename(lib) for lib in ext_local_libs}
+        )
+
+
+def test_delocate_path_install_names():
+    # type: () -> None
+    # Test install name modifications.
+    with InTemporaryDirectory() as tmpdir:
+        subtree = pjoin(tmpdir, 'subtree')
+        all_local_libs = _make_libtree(subtree)
+        lib_path = "dynlibs"
+        copied = delocate_path(".", lib_path, copy_filt_func=None)
+        print(copied)
+        # Libraries using the copied libraries now have an install name starting
         # with @loader_path, then pointing to the copied library directory
-        all_local_libs = liba, libb, libc, test_lib, slibc, stest_lib
         for lib in all_local_libs:
-            pathto_copies = relpath(realpath(copy_dir2),
-                                    dirname(realpath(lib)))
-            lib_inames = get_install_names(lib)
-            new_links = ['@loader_path/{0}/{1}'.format(pathto_copies,
-                                                       basename(elib))
-                         for elib in copied]
-            assert set(new_links) <= set(lib_inames), lib
+            print(lib)
+            pathto_copies = relpath(realpath(lib_path), dirname(realpath(lib)))
+            install_names = set(get_install_names(lib))
+            install_base_names = {basename(path) for path in install_names}
+            # Get new install names for lib's dependencies.
+            new_install_names = {
+                pjoin("@loader_path", pathto_copies, basename(external_lib))
+                for external_lib in copied  # Only copied libraries are counted.
+                if basename(external_lib) in install_base_names
+            }
+            assert new_install_names
+            assert new_install_names <= install_names
 
 
 def _copy_fixpath(files, directory):

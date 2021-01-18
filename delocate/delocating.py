@@ -91,14 +91,13 @@ def delocate_tree_libs(
             if not exists(required):
                 raise DelocationError('library "{0}" does not exist'.format(
                     required))
-            logger.debug("%s will be copied.", required)
             # Copy requirings to preserve it since it will be modified later.
             copied_libs[required] = requirings.copy()
             copied_basenames.add(r_ed_base)
         else:  # Is local, plan to set relative loader_path
             delocated_libs.add(required)
-            logger.debug("%s will be modified in-place.", required)
-    # Modify in place now that we've checked for errors
+    # Modify in place now that we've checked for errors.
+    # Copy libraries outside of root_path to lib_path.
     for old_path in copied_libs:
         new_path = realpath(pjoin(lib_path, basename(old_path)))
         logger.debug("Copying library %s", old_path)
@@ -113,7 +112,7 @@ def delocate_tree_libs(
                 continue
             lib_dict[required][new_path] = lib_dict[required][old_path]
             del lib_dict[required][old_path]
-    logger.debug("2nd step:%r", lib_dict)
+    # Update install names of libraries using lib_dict.
     for required in delocated_libs:
         # Set relative path for local library
         for requiring, orig_install_name in lib_dict[required].items():
