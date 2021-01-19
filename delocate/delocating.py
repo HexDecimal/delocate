@@ -100,7 +100,7 @@ def delocate_tree_libs(
     # Copy libraries outside of root_path to lib_path.
     for old_path in copied_libs:
         new_path = realpath(pjoin(lib_path, basename(old_path)))
-        logger.debug("Copying library %s", old_path)
+        logger.info("Copying library %s", old_path)
         shutil.copy(old_path, new_path)
         # Delocate this file now that it is stored locally.
         delocated_libs.add(new_path)
@@ -118,7 +118,7 @@ def delocate_tree_libs(
         for requiring, orig_install_name in lib_dict[required].items():
             req_rel = relpath(required, dirname(requiring))
             new_install_name = '@loader_path/' + req_rel
-            logger.debug(
+            logger.info(
                 "Modifying install name in %s from %s to %s",
                 requiring,
                 orig_install_name,
@@ -338,14 +338,12 @@ def delocate_path(
         lib_filt_func = _dylibs_only
     elif isinstance(lib_filt_func, str):
         raise TypeError('lib_filt_func string can only be "dylibs-only"')
+    lib_filt_func = lib_filt_func or (lambda _: True)
     if not exists(lib_path):
         os.makedirs(lib_path)
 
     lib_dict = {}  # type: Dict[Text, Dict[Text, Text]]
     for library_path in walk_directory(tree_path, lib_filt_func):
-        if not os.path.isfile(library_path):
-            logger.error("Can't find library: %s", library_path)
-            continue
         for depending_path, install_name in get_dependencies(library_path):
             if copy_filt_func and not copy_filt_func(depending_path):
                 continue
