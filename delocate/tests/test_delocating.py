@@ -57,6 +57,7 @@ def _make_libtree(out_path):
     return liba, libb, libc, test_lib, slibc, stest_lib
 
 
+@pytest.mark.filterwarnings("ignore:tree_libs:DeprecationWarning")
 def test_delocate_tree_libs():
     # type: () -> None
     # Test routine to copy library dependencies into a local directory
