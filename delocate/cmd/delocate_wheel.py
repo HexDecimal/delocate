@@ -31,8 +31,10 @@ def main():
                help="Directory to store delocated wheels (default is to "
                "overwrite input)"),
         Option("-v", "--verbose",
-               action="store_true",
-               help="Show more verbose report of progress and failure"),
+               action="count",
+               help="Show a more verbose report of progress and failure."
+               "  Additional flags show even more info, up to -vv.",
+               default=0),
         Option("-k", "--check-archs",
                action="store_true",
                help="Check architectures of depended libraries"),
@@ -48,8 +50,9 @@ def main():
     if len(wheels) < 1:
         parser.print_help()
         sys.exit(1)
-    if opts.verbose:
-        logging.basicConfig(level="DEBUG")
+    logging.basicConfig(
+        level=max(logging.DEBUG, logging.WARNING - 10 * opts.verbose),
+    )
     multi = len(wheels) > 1
     if opts.wheel_dir:
         wheel_dir = expanduser(opts.wheel_dir)
