@@ -100,7 +100,9 @@ def delocate_tree_libs(
     # Copy libraries outside of root_path to lib_path.
     for old_path in copied_libs:
         new_path = realpath(pjoin(lib_path, basename(old_path)))
-        logger.info("Copying library %s", old_path)
+        logger.info(
+            "Copying library %s to %s", old_path, relpath(new_path, root_path)
+        )
         shutil.copy(old_path, new_path)
         # Delocate this file now that it is stored locally.
         delocated_libs.add(new_path)
@@ -120,7 +122,7 @@ def delocate_tree_libs(
             new_install_name = '@loader_path/' + req_rel
             logger.info(
                 "Modifying install name in %s from %s to %s",
-                requiring,
+                relpath(requiring, root_path),
                 orig_install_name,
                 new_install_name,
             )
