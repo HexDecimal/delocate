@@ -84,6 +84,11 @@ def main() -> None:
                 ),
             ),
             Option(
+                "--sanitize-rpaths",
+                action="store_true",
+                help="Remove absolute rpaths from binaries",
+            ),
+            Option(
                 "--ignore-missing-dependencies",
                 action="store_true",
                 help=(
@@ -132,6 +137,7 @@ def main() -> None:
             require_archs=require_archs,
             executable_path=opts.executable_path,
             ignore_missing=opts.ignore_missing_dependencies,
+            sanitize_rpaths=opts.sanitize_rpaths,
         )
         if opts.verbose and len(copied):
             print("Copied to package {0} directory:".format(opts.lib_sdir))
