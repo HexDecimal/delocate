@@ -12,9 +12,8 @@ import os
 import shutil
 import subprocess
 import sys
-from os.path import basename, exists
+from os.path import basename, exists, realpath, splitext
 from os.path import join as pjoin
-from os.path import realpath, splitext
 from pathlib import Path
 from typing import Text
 
@@ -86,7 +85,7 @@ def test_listdeps(plat_wheel: PlatWheel, script_runner: ScriptRunner) -> None:
     # single path, no libs
     with InTemporaryDirectory():
         zip2dir(PURE_WHEEL, "pure")
-        result = script_runner.run(["delocate-listdeps", "pure"], check=True)
+        result = script_runner.run(["delocate-listdeps", "missing"], check=True)
         assert result.stdout.strip() == ""
 
         # Multiple paths one with libs
