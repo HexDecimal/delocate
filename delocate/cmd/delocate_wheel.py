@@ -86,7 +86,7 @@ def main() -> None:
             Option(
                 "--sanitize-rpaths",
                 action="store_true",
-                help="Remove absolute rpaths from binaries",
+                help="Remove absolute and relative rpaths from binaries",
             ),
             Option(
                 "--ignore-missing-dependencies",
