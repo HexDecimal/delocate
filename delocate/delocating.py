@@ -9,7 +9,7 @@ import re
 import shutil
 import stat
 import warnings
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Mapping
 from os.path import abspath, basename, dirname, exists, realpath, relpath
 from os.path import join as pjoin
 from pathlib import Path
@@ -19,12 +19,6 @@ from typing import (
     Final,
 )
 
-from macholib.mach_o import (  # type: ignore[import-untyped]
-    CPU_TYPE_NAMES,
-    LC_BUILD_VERSION,
-    LC_VERSION_MIN_MACOSX,
-)
-from macholib.MachO import MachO  # type: ignore[import-untyped]
 from packaging.utils import parse_wheel_filename
 from packaging.version import Version
 from typing_extensions import deprecated
@@ -40,7 +34,8 @@ from .libsana import (
 from .pkginfo import read_pkg_info, write_pkg_info
 from .tmpdirs import TemporaryDirectory
 from .tools import (
-    _is_macho_file,
+    NotObjectError,
+    _get_macos_min_version,
     _remove_absolute_rpaths,
     dir2zip,
     find_package_dirs,
@@ -584,38 +579,6 @@ def _make_install_name_ids_unique(
         validate_signature(lib)
 
 
-def _get_macos_min_version(dylib_path: Path) -> Iterator[tuple[str, Version]]:
-    """Get the minimum macOS version from a dylib file.
-
-    Parameters
-    ----------
-    dylib_path : Path
-        The path to the dylib file.
-
-    Yields
-    ------
-    str
-        The CPU type.
-    Version
-        The minimum macOS version.
-    """
-    if not _is_macho_file(dylib_path):
-        return
-    for header in MachO(dylib_path).headers:
-        for cmd in header.commands:
-            if cmd[0].cmd == LC_BUILD_VERSION:
-                version = cmd[1].minos
-            elif cmd[0].cmd == LC_VERSION_MIN_MACOSX:
-                version = cmd[1].version
-            else:
-                continue
-            yield (
-                CPU_TYPE_NAMES.get(header.header.cputype, "unknown"),
-                Version(f"{version >> 16 & 0xFF}.{version >> 8 & 0xFF}"),
-            )
-            break
-
-
 def _get_archs_and_version_from_wheel_name(
     wheel_name: str,
 ) -> dict[str, Version]:
@@ -798,16 +761,19 @@ def _calculate_minimum_wheel_name(
     all_library_versions: dict[str, dict[Version, list[Path]]] = {}
 
     for lib in wheel_dir.glob("**/*"):
-        for arch, version in _get_macos_min_version(lib):
-            all_library_versions.setdefault(arch.lower(), {}).setdefault(
-                version, []
-            ).append(lib)
-            logger.debug(
-                "Bundled library info: %s arch=%s target=%s",
-                lib.name,
-                arch,
-                version,
-            )
+        try:
+            for arch, version in _get_macos_min_version(lib).items():
+                all_library_versions.setdefault(arch.lower(), {}).setdefault(
+                    version, []
+                ).append(lib)
+                logger.debug(
+                    "Bundled library info: %s arch=%s target=%s",
+                    lib.name,
+                    arch,
+                    version,
+                )
+        except NotObjectError:
+            pass
 
     # Derive architecture requirements from bundled libraries
     arch_version = {

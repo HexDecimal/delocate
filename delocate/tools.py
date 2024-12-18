@@ -21,6 +21,7 @@ from typing import (
     TypeVar,
 )
 
+from packaging.version import Version
 from typing_extensions import deprecated
 
 T = TypeVar("T")
@@ -30,6 +31,13 @@ logger = logging.getLogger(__name__)
 
 class InstallNameError(Exception):
     """Errors reading or modifying macOS install name identifiers."""
+
+
+class NotObjectError(Exception):
+    """File was not interpreted as a Mach-O object file.
+
+    Typically raised when `otool` is unable to parse a file.
+    """
 
 
 @deprecated("Replace this call with subprocess.run")
@@ -285,7 +293,10 @@ def parse_install_name(line: str) -> tuple[str, str, str]:
 
 
 _OTOOL_ARCHITECTURE_RE = re.compile(
-    r"^(?P<name>.*?)(?: \(architecture (?P<architecture>\w+)\))?:$"
+    r"^(?P<name>.*?)"
+    r"(?:\(.+?\))??"
+    r"(?: \(architecture (?P<architecture>\w+)\))?"
+    r":$"
 )
 """Matches the library separator line in 'otool -L'-like outputs.
 
@@ -336,6 +347,12 @@ def _parse_otool_listing(stdout: str) -> dict[str, list[str]]:
     ... """)
     {'': ['item_1']}
     >>> _parse_otool_listing("""
+    ... Archive : example.a (architecture arm64)
+    ... example.a(example.c.o) (architecture arm64):
+    ... \titem_1
+    ... """)
+    {'arm64': ['item_1']}
+    >>> _parse_otool_listing("""
     ... example.so (architecture x86_64):
     ... example.so (architecture arm64):
     ... """)
@@ -356,6 +373,9 @@ def _parse_otool_listing(stdout: str) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     lines = stdout.split("\n")
     while lines:
+        if lines[0].startswith("Archive :"):
+            lines.pop(0)  # Skip archive lines
+            continue
         # Detect and parse the name/arch header line.
         match_arch = _OTOOL_ARCHITECTURE_RE.match(lines.pop(0))
         if not match_arch:
@@ -1245,3 +1265,92 @@ def validate_signature(filename: str) -> None:
 
     # This file's signature is invalid and needs to be replaced
     replace_signature(filename, "-")  # Replace with an ad-hoc signature
+
+
+def _parse_macos_min_version(stdout: str) -> Iterator[tuple[str, Version]]:
+    '''Iterate over the minimum architecture version of an otool output.
+
+    Examples
+    --------
+    >>> dict(_parse_macos_min_version("""
+    ... Archive : example.osx.a (architecture arm64)
+    ... example.osx.a(example.c.o) (architecture arm64):
+    ... Load command 0
+    ...    cmd LC_BUILD_VERSION
+    ...  minos 11.0"""
+    ... ))
+    {'arm64': <Version('11.0')>}
+    >>> dict(_parse_macos_min_version("""
+    ... example.so (architecture arm64):
+    ... Load command 0
+    ...      cmd LC_VERSION_MIN_MACOSX
+    ...  version 11.0"""
+    ... ))
+    {'arm64': <Version('11.0')>}
+    >>> dict(_parse_macos_min_version("""
+    ... example.so (architecture arm64):
+    ... Load command 0
+    ...    cmd LC_BUILD_VERSION
+    ...  minos 11.0
+    ... example.so (architecture x86_64):
+    ... Load command 0
+    ...    cmd LC_BUILD_VERSION
+    ...  minos 12.0"""
+    ... ))
+    {'arm64': <Version('11.0')>, 'x86_64': <Version('12.0')>}
+    '''
+    for arch, lines in _parse_otool_listing(stdout).items():
+        version_key: None | str = None
+        for line in lines:
+            words = line.strip().split()
+            if len(words) != 2:
+                continue
+            key, value = words
+            if key == "cmd":
+                version_key = {
+                    "LC_BUILD_VERSION": "minos",
+                    "LC_VERSION_MIN_MACOSX": "version",
+                }.get(value)
+            elif key == version_key:
+                yield arch, Version(value)
+                break
+
+
+def _get_macos_min_version(dylib_path: Path) -> dict[str, Version]:
+    """Get the minimum macOS version from a dylib file.
+
+    Parameters
+    ----------
+    dylib_path : Path
+        The path to the dylib file.
+
+    Yields
+    ------
+    str
+        The CPU type.
+    Version
+        The minimum macOS version.
+
+    Raises
+    ------
+    NotObjectError:
+        When `dylib_path` is not a MacOS object file.
+    """
+    try:
+        otool = subprocess.run(
+            ["otool", "-arch", "all", "-l", "-m", dylib_path],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise NotObjectError(dylib_path, exc.stderr) from exc
+
+    if not _line0_says_object(otool.stdout, dylib_path):
+        raise NotObjectError(dylib_path, otool.stdout)
+    try:
+        result = dict(_parse_macos_min_version(otool.stdout))
+    except RuntimeError as exc:
+        raise NotObjectError(dylib_path, otool.stdout) from exc
+    logger.debug("%s versions %s", dylib_path, result)
+    return result
